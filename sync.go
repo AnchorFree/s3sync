@@ -19,11 +19,12 @@ import (
 
 // Action for syncing
 type Action struct {
-	Type     int
-	Src      *FileURI
-	Dst      *FileURI
-	Size     int64
-	Checksum string
+	Type      int
+	Src       *FileURI
+	Dst       *FileURI
+	Size      int64
+	Checksum  string
+	IsChanged bool
 }
 
 const (
@@ -31,7 +32,7 @@ const (
 	NUM_CHECKSUM = 1
 )
 
-var isChanged bool
+var IsChanged bool
 
 // One command to sync files/directories -- it's always recursive when directories are present
 //
@@ -177,12 +178,13 @@ func CmdSync(config *Config, c *cli.Context) error {
 		file_count += 1
 
 		if src_info == nil {
-			chanRemove <- Action{
-				Type: ACT_REMOVE,
-				Src:  src,
-				Dst:  dst,
-			}
-			isChanged = true
+			/*
+				chanRemove <- Action{
+					Type: ACT_REMOVE,
+					Src:  src,
+					Dst:  dst,
+				}
+			*/
 		} else if dst_info == nil {
 			chanCopy <- Action{
 				Type: ACT_COPY,
@@ -192,7 +194,7 @@ func CmdSync(config *Config, c *cli.Context) error {
 			}
 			estimated_bytes += src_info.Size
 			chanProgress <- src_info.Size
-			isChanged = true
+			IsChanged = true
 		} else if src_info.Size != dst_info.Size {
 			chanCopy <- Action{
 				Type: ACT_COPY,
@@ -200,7 +202,7 @@ func CmdSync(config *Config, c *cli.Context) error {
 				Dst:  dst,
 				Size: src_info.Size,
 			}
-			isChanged = true
+			IsChanged = true
 			estimated_bytes += src_info.Size
 			chanProgress <- src_info.Size
 		} else if config.CheckMD5 {
@@ -213,7 +215,7 @@ func CmdSync(config *Config, c *cli.Context) error {
 				}
 				estimated_bytes += src_info.Size
 				chanProgress <- src_info.Size
-				isChanged = true
+				IsChanged = true
 			} else {
 				check := src_info.Checksum
 				if check == "" {
@@ -319,7 +321,7 @@ func CmdSync(config *Config, c *cli.Context) error {
 	os.Stdout.Write([]byte{'\n'})
 
 	// on-change-action
-	if isChanged {
+	if IsChanged && config.OnChange != "" {
 		action := fmt.Sprintf("%v", config.OnChange)
 		cmd := exec.Command("/bin/sh", "-c", action)
 		err = cmd.Run()

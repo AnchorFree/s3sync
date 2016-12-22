@@ -50,9 +50,11 @@ func NewConfig(c *cli.Context) *Config {
 
 	parseOptions(config, c)
 
-	if c.GlobalIsSet("no-check-md5") || c.IsSet("no-check-md5") {
-		config.CheckMD5 = false
-	}
+	/*
+		if c.GlobalIsSet("no-check-md5") || c.IsSet("no-check-md5") {
+			config.CheckMD5 = false
+		}
+	*/
 
 	return config
 }
