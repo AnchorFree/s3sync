@@ -160,11 +160,14 @@ func CmdSync(c *cli.Context) error {
 
 	if ActionRequired {
 		action := fmt.Sprintf("%v", c.GlobalString("exec-on-change"))
-		cmd := exec.Command("/bin/sh", "-c", action)
 		fmt.Println("Executing command", action)
+
+		cmd := exec.Command("/bin/sh", "-c", action)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 		err = cmd.Run()
 		if err != nil {
-			fmt.Printf("could not execute command '%v' due to %v", action, err)
+			fmt.Println("could not execute due to error:", err)
 		}
 	}
 	return nil
