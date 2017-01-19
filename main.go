@@ -58,7 +58,7 @@ func parseURL(path string) S3Address {
 func main() {
 	app := cli.NewApp()
 	app.Name = "s3sync"
-	app.Version = "0.0.2"
+	app.Version = "0.0.3"
 
 	cli.VersionFlag = cli.BoolFlag{
 		Name:  "version, V",
