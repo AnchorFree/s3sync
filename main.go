@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -26,6 +27,12 @@ import (
 type S3Address struct {
 	Bucket string
 	Prefix string
+}
+
+type SyncObject struct {
+	Bucket   string
+	O        s3.Object
+	Filename string
 }
 
 func parseURL(path string) S3Address {
@@ -106,6 +113,8 @@ func CmdSync(c *cli.Context) error {
 	s3_path := c.Args().Get(0)
 	local_path := c.Args().Get(1)
 
+	var wg sync.WaitGroup
+
 	u := parseURL(s3_path)
 
 	params := &s3.ListObjectsV2Input{
@@ -120,6 +129,7 @@ func CmdSync(c *cli.Context) error {
 		func(p *s3.ListObjectsV2Output, last bool) (shouldContinue bool) {
 			i++
 			for _, obj := range p.Contents {
+				var sync_obj SyncObject
 				// make magic here
 				var filter_out bool
 				matched := true
@@ -137,12 +147,28 @@ func CmdSync(c *cli.Context) error {
 					fileInfo, err := os.Stat(filename)
 					if os.IsNotExist(err) {
 						fmt.Println("file: ", filename, "does not exists, copying from s3")
-						copyFileFromS3(svc, u.Bucket, *obj, filename)
+						go func() {
+							wg.Add(1)
+							defer wg.Done()
+							sync_obj.Bucket = u.Bucket
+							sync_obj.O = *obj
+							sync_obj.Filename = filename
+							copyFileFromS3(sync_obj)
+
+						}()
+						//copyFileFromS3(svc, u.Bucket, *obj, filename)
 						ActionRequired = true
 					} else {
 						if fileInfo.ModTime().UTC() != *obj.LastModified {
 							fmt.Println("modification time of file:", filename, "does not match one from s3, ordering copy")
-							copyFileFromS3(svc, u.Bucket, *obj, filename)
+							go func() {
+								wg.Add(1)
+								defer wg.Done()
+								sync_obj.Bucket = u.Bucket
+								sync_obj.O = *obj
+								sync_obj.Filename = filename
+								copyFileFromS3(sync_obj)
+							}()
 							ActionRequired = true
 						}
 					}
@@ -157,6 +183,8 @@ func CmdSync(c *cli.Context) error {
 		fmt.Println(err.Error())
 		return err
 	}
+
+	wg.Wait()
 
 	if ActionRequired {
 		action := fmt.Sprintf("%v", c.GlobalString("exec-on-change"))
@@ -174,10 +202,18 @@ func CmdSync(c *cli.Context) error {
 
 }
 
-func copyFileFromS3(s *s3.S3, bucket string, obj s3.Object, filename string) error {
+func copyFileFromS3(so SyncObject) error {
+	sess, err := session.NewSession()
+
+	if err != nil {
+		fmt.Println("failed to create session,", err)
+		return err
+	}
+
+	s := s3.New(sess)
 	params := &s3.GetObjectInput{
-		Bucket: aws.String(bucket),   // Required
-		Key:    aws.String(*obj.Key), // Required
+		Bucket: aws.String(so.Bucket), // Required
+		Key:    aws.String(*so.O.Key), // Required
 	}
 
 	resp, err := s.GetObject(params)
@@ -191,10 +227,10 @@ func copyFileFromS3(s *s3.S3, bucket string, obj s3.Object, filename string) err
 		return err
 	}
 
-	err = ioutil.WriteFile(filename, data, 0666)
+	err = ioutil.WriteFile(so.Filename, data, 0666)
 	if err != nil {
 		fmt.Println("Could not write file from s3 due to:", err)
 		return err
 	}
-	return os.Chtimes(filename, *obj.LastModified, *obj.LastModified)
+	return os.Chtimes(so.Filename, *so.O.LastModified, *so.O.LastModified)
 }
