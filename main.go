@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -97,6 +98,8 @@ func main() {
 func CmdSync(c *cli.Context) error {
 	sess, err := session.NewSession()
 
+	var wg sync.WaitGroup
+
 	if err != nil {
 		fmt.Println("failed to create session,", err)
 		return err
@@ -137,17 +140,18 @@ func CmdSync(c *cli.Context) error {
 					fileInfo, err := os.Stat(filename)
 					if os.IsNotExist(err) {
 						fmt.Println("file: ", filename, "does not exists, copying from s3")
-						copyFileFromS3(svc, u.Bucket, *obj, filename)
+						go copyFileFromS3(svc, u.Bucket, *obj, filename, &wg)
 						ActionRequired = true
 					} else {
 						if fileInfo.ModTime().UTC() != *obj.LastModified {
 							fmt.Println("modification time of file:", filename, "does not match one from s3, ordering copy")
-							copyFileFromS3(svc, u.Bucket, *obj, filename)
+							go copyFileFromS3(svc, u.Bucket, *obj, filename, &wg)
 							ActionRequired = true
 						}
 					}
 				}
 			}
+			wg.Wait()
 			return true
 		})
 
@@ -174,7 +178,9 @@ func CmdSync(c *cli.Context) error {
 
 }
 
-func copyFileFromS3(s *s3.S3, bucket string, obj s3.Object, filename string) error {
+func copyFileFromS3(s *s3.S3, bucket string, obj s3.Object, filename string, wg *sync.WaitGroup) error {
+	defer wg.Done()
+	wg.Add(1)
 	params := &s3.GetObjectInput{
 		Bucket: aws.String(bucket),   // Required
 		Key:    aws.String(*obj.Key), // Required
