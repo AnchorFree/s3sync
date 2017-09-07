@@ -9,7 +9,7 @@ RUN cd /go/src/github.com/anchorfree/s3sync \
 
 
 FROM alpine
-RUN apk add --update-cache --no-cache ca-certificates
+RUN apk add --update-cache --no-cache ca-certificates curl
 COPY --from=0 /build/s3sync /
 
 ENTRYPOINT ["/s3sync"]
