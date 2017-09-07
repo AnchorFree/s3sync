@@ -11,4 +11,5 @@ RUN cd /go/src/github.com/anchorfree/s3sync \
 FROM alpine
 COPY --from=0 /build/s3sync /
 
-ENTRYPOINT ["/s3sync", "sync"]
+ENTRYPOINT ["/s3sync"]
+CMD ["sync"]
