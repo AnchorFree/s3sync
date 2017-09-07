@@ -5,7 +5,7 @@ RUN curl https://glide.sh/get | sh \
     && cd /go/src/github.com/anchorfree/s3sync \
     && glide install -v
 RUN cd /go/src/github.com/anchorfree/s3sync \
-    && go build -o /build/s3sync main.go
+    && CGO_ENABLED=0 GOOS=linux go build -o /build/s3sync main.go
 
 
 FROM alpine
