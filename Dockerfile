@@ -9,7 +9,8 @@ RUN cd /go/src/github.com/anchorfree/s3sync \
 
 
 FROM alpine
-RUN apk add --update-cache --no-cache ca-certificates curl netcat-openbsd
+RUN apk add --update-cache --no-cache ca-certificates curl netcat-openbsd \
+    && ln -s /host/var/run/docker.sock /var/run/docker.sock
 COPY --from=0 /build/s3sync /
 COPY entrypoint.sh /entrypoint.sh
 
