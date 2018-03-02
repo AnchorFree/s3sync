@@ -3,22 +3,24 @@
 TIMEOUT=${TIMEOUT:-"300"}
 
 if [ -z ${S3_PATH} ]; then
-	echo "S3_PATH and LOCAL_PATH are mandatory"
-	exit 1
+        echo "S3_PATH and LOCAL_PATH are mandatory"
+        exit 1
 fi
 
-if [ -z ${LOCAL_PATH} ]; then
-	echo "S3_PATH and LOCAL_PATH are mandatory"
-	exit 1
+if [ -z ${CREATE_K8S_SECRET} ] || [ ${CREATE_K8S_SECRET} != "true" ]; then
+        if [ -z ${LOCAL_PATH} ]; then
+                echo "S3_PATH and LOCAL_PATH are mandatory if CREATE_K8S_SECRET is not defined"
+                exit 1
+        fi
 fi
 
 if [ -z ${AWS_ACCESS_KEY_ID} ]; then
-	echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are mandatory"
+        echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are mandatory"
     exit 1
 fi
 
 if [ -z ${AWS_SECRET_ACCESS_KEY} ]; then
-	echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are mandatory"
+        echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are mandatory"
     exit 1
 fi
 
@@ -44,3 +46,4 @@ while [ "$ALIVE" -eq "1" ]; do
     sleep ${TIMEOUT} &
     wait
 done
+
