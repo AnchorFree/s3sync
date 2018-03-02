@@ -201,7 +201,6 @@ func CmdSync(c *cli.Context) error {
                 }
 
                 err = saveSecretMapToK8s(secret_hash,secret_namespace)
-                }
         }
 
         if err != nil {
