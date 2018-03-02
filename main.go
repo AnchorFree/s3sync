@@ -80,7 +80,7 @@ func parseURL(path string) S3Address {
 func main() {
         app := cli.NewApp()
         app.Name = "s3sync"
-        app.Version = "0.0.4"
+        app.Version = "0.0.5"
 
         cli.VersionFlag = cli.BoolFlag{
                 Name:  "version, V",
@@ -112,6 +112,16 @@ func main() {
                         Name:   "k8s-secret-namespace",
                         Usage:  "Kubernetes cluster Namesace Name for secrets",
                         EnvVar: "K8S_SECRET_NAMESPACE",
+                },
+                cli.StringFlag{
+                        Name:   "k8s-custom-label-name",
+                        Usage:  "Kubernetes label name that will be assign to secret",
+                        EnvVar: "K8S_CUSTOM_LABEL_NAME",
+                },
+                cli.StringFlag{
+                        Name:   "k8s-custom-label-value",
+                        Usage:  "Kubernetes label value that will be assign to secret",
+                        EnvVar: "K8S_CUSTOM_LABEL_VALUE",
                 },
         }
 
@@ -200,7 +210,7 @@ func CmdSync(c *cli.Context) error {
                         secret_namespace = c.GlobalString("k8s-secret-namespace")
                 }
 
-                err = saveSecretMapToK8s(secret_hash,secret_namespace)
+		err = saveSecretMapToK8s(secret_hash,secret_namespace,c.GlobalString("k8s-custom-label-name"),c.GlobalString("k8s-custom-label-value"))
         }
 
         if err != nil {
@@ -362,8 +372,9 @@ func saveFileToSecretMapFromS3(s *s3.S3, bucket string, obj s3.Object, filename 
         return err
 }
 
-func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string) (err error) {
+func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label_name string, label_value string) (err error) {
         fmt.Println("Start creating secrets in Kubernetes")
+
         for secret_domain := range sh {
                 var err_message string
                 if sh[secret_domain]["cert"] == nil {
@@ -373,10 +384,19 @@ func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string) (err 
                         err_message = "ERROR: " + secret_domain + " do not have key file"
                         fmt.Println(err_message)
                 } else {
+                        var labels map[string]string
+                        labels = make (map[string]string)
+                        labels["cert_domain"] = secret_domain
+                        labels["created_by"] = "s3sync"
+                        if label_name != "" && label_value != "" {
+                                labels[label_name] = label_value
+                        }
+
                         _, err = EnsureSecret(&apiv1.Secret{
                                 ObjectMeta: metav1.ObjectMeta{
                                         Name:      secret_domain,
                                         Namespace: namespace,
+                                        Labels: labels,
                                 },
                                 Data: map[string][]byte{
                                         apiv1.TLSCertKey:       sh[secret_domain]["cert"],
@@ -390,6 +410,6 @@ func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string) (err 
                         }
                 }
         }
-                return nil
+        return nil
 }
 
