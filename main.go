@@ -389,7 +389,6 @@ func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label
                         labels["cert_domain"] = secret_domain
                         labels["created_by"] = "s3sync"
                         if label_name != "" && label_value != "" {
-                                fmt.Println(label_name, " = ", label_value)
                                 labels[label_name] = label_value
                         }
 
