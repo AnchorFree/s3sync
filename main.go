@@ -419,6 +419,3 @@ func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label
         }
         return nil
 }
-
-                                                                                                                                                                                                  422,0-1       Bot
-
