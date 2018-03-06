@@ -123,6 +123,11 @@ func main() {
                         Usage:  "Kubernetes label value that will be assign to secret",
                         EnvVar: "K8S_CUSTOM_LABEL_VALUE",
                 },
+                cli.StringFlag{
+                        Name:   "verbose",
+                        Usage:  "Verbose flag",
+                        EnvVar: "VERBOSE",
+                },
         }
 
         app.Commands = []cli.Command{
@@ -210,7 +215,7 @@ func CmdSync(c *cli.Context) error {
                         secret_namespace = c.GlobalString("k8s-secret-namespace")
                 }
 
-		err = saveSecretMapToK8s(secret_hash,secret_namespace,c.GlobalString("k8s-custom-label-name"),c.GlobalString("k8s-custom-label-value"))
+                err = saveSecretMapToK8s(secret_hash,secret_namespace,c.GlobalString("k8s-custom-label-name"),c.GlobalString("k8s-custom-label-value"),c.GlobalString("verbose"))
         }
 
         if err != nil {
@@ -315,12 +320,14 @@ func createApiserverClient() (*kubernetes.Clientset, error) {
         return client, nil
 }
 
-func EnsureSecret(secret *apiv1.Secret) (*apiv1.Secret, error) {
+func EnsureSecret(secret *apiv1.Secret, verbose string) (*apiv1.Secret, error) {
         kubeClient, err := createApiserverClient()
         s, err := kubeClient.CoreV1().Secrets(secret.Namespace).Create(secret)
         if err != nil {
                 if k8sErrors.IsAlreadyExists(err) {
-                        fmt.Println("Secret" ,secret.Name," already exist in namespace ",secret.Namespace,", updating")
+                        if verbose == "true" {
+                                fmt.Println("Secret" ,secret.Name," already exist in namespace ",secret.Namespace,", updating")
+                        }
                         return kubeClient.CoreV1().Secrets(secret.Namespace).Update(secret)
                 }
                 fmt.Println("could not execute due to error:", err)
@@ -372,7 +379,7 @@ func saveFileToSecretMapFromS3(s *s3.S3, bucket string, obj s3.Object, filename 
         return err
 }
 
-func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label_name string, label_value string) (err error) {
+func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label_name string, label_value string, verbose string) (err error) {
         fmt.Println("Start creating secrets in Kubernetes")
 
         for secret_domain := range sh {
@@ -402,7 +409,7 @@ func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label
                                         apiv1.TLSCertKey:       sh[secret_domain]["cert"],
                                         apiv1.TLSPrivateKeyKey: sh[secret_domain]["key"],
                                 },
-                        })
+                        }, verbose)
 
                         if err != nil {
                                 fmt.Println(err.Error())
@@ -412,4 +419,3 @@ func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label
         }
         return nil
 }
-
