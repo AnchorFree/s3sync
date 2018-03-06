@@ -333,7 +333,9 @@ func EnsureSecret(secret *apiv1.Secret, verbose string) (*apiv1.Secret, error) {
                 fmt.Println("could not execute due to error:", err)
                 return nil, err
         }
-        fmt.Println("Secret" ,secret.Name," created in namespace ",secret.Namespace)
+        if verbose == "true" {
+                fmt.Println("Secret" ,secret.Name," created in namespace ",secret.Namespace)
+        }
         return s, nil
 }
 
@@ -380,7 +382,9 @@ func saveFileToSecretMapFromS3(s *s3.S3, bucket string, obj s3.Object, filename 
 }
 
 func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label_name string, label_value string, verbose string) (err error) {
-        fmt.Println("Start creating secrets in Kubernetes")
+        if verbose == "true" {
+                fmt.Println("Start creating secrets in Kubernetes")
+        }
 
         for secret_domain := range sh {
                 var err_message string
