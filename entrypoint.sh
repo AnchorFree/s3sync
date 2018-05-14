@@ -38,7 +38,7 @@ ALIVE=1
 trap ALIVE=0 SIGTERM
 
 if [ ! -z ${EXEC_ON_START} ]; then
-    ${EXEC_ON_START}
+    "${EXEC_ON_START}"
 fi
 
 while [ "$ALIVE" -eq "1" ]; do
