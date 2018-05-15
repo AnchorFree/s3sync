@@ -37,7 +37,7 @@ export MATCH_REGEXP AWS_REGION
 ALIVE=1
 trap ALIVE=0 SIGTERM
 
-if [ ! -z ${EXEC_ON_START} ]; then
+if [ ! -z "${EXEC_ON_START+x}" ]; then
     ${EXEC_ON_START}
 fi
 
