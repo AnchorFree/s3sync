@@ -413,6 +413,7 @@ func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label
                                         apiv1.TLSCertKey:       sh[secret_domain]["cert"],
                                         apiv1.TLSPrivateKeyKey: sh[secret_domain]["key"],
                                 },
+								Type: apiv1.SecretType("kubernetes.io/tls"),
                         }, verbose)
 
                         if err != nil {
