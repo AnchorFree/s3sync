@@ -43,7 +43,7 @@ fi
 
 while [ "$ALIVE" -eq "1" ]; do
     if [ ! -z "${EXEC_PRE_ITERATION}" -a -x "${EXEC_PRE_ITERATION}" ]; then
-        ${EXEC_PRE_ITERATION}
+        . ${EXEC_PRE_ITERATION}
     fi
 
     /s3sync sync ${S3_PATH} ${LOCAL_PATH}
