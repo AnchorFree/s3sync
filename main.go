@@ -1,5 +1,3 @@
-// +build example
-
 package main
 
 import (
@@ -365,24 +363,30 @@ func saveFileToSecretMapFromS3(s *s3.S3, bucket string, obj s3.Object, filename 
 		return err
 	}
 
-	r_secret_name, err := regexp.Compile("^(.+)\\.(?:key|crt)$")
+	if strings.HasSuffix(filename, ".key") || strings.HasSuffix(filename, ".crt") {
 
-	match_key, err := regexp.MatchString("^(.+)\\.key$", filename)
-	match_cert, err := regexp.MatchString("^(.+)\\.crt$", filename)
-
-	if match_key {
-		if secret_hash[r_secret_name.FindStringSubmatch(filename)[1]] == nil {
-			secret_hash[r_secret_name.FindStringSubmatch(filename)[1]] = make(map[string][]byte)
+		// If it's a wildcard certificate, we should change
+		// the initial underscore in the filename, since we use
+		// this name (stripping off '.crt' or '.key' suffix) as
+		// the name of k8s secret, and kubernetes doesn't allow
+		// a resource name to start with underscore
+		secretName := ""
+		if strings.HasPrefix(filename, "_.") {
+			secretName = "wildcard" + filename[1:len(filename)-4]
+		} else {
+			secretName = filename[:len(filename)-4]
 		}
-		secret_hash[r_secret_name.FindStringSubmatch(filename)[1]]["key"] = data
-	}
-	if match_cert {
-		if secret_hash[r_secret_name.FindStringSubmatch(filename)[1]] == nil {
-			secret_hash[r_secret_name.FindStringSubmatch(filename)[1]] = make(map[string][]byte)
-		}
-		secret_hash[r_secret_name.FindStringSubmatch(filename)[1]]["cert"] = data
-	}
 
+		if secret_hash[secretName] == nil {
+			secret_hash[secretName] = make(map[string][]byte)
+		}
+
+		if strings.HasSuffix(filename, ".key") {
+			secret_hash[secretName]["key"] = data
+		} else {
+			secret_hash[secretName]["cert"] = data
+		}
+	}
 	return err
 }
 
