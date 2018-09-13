@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/md5"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/url"
@@ -185,15 +187,19 @@ func CmdSync(c *cli.Context) error {
 						saveFileToSecretMapFromS3(svc, u.Bucket, *obj, filepath.Base(*obj.Key), &wg)
 					} else {
 						filename := filepath.Join(local_path, filepath.Base(*obj.Key))
-						fileInfo, err := os.Stat(filename)
 
-						if os.IsNotExist(err) {
+						if _, err := os.Stat(filename); os.IsNotExist(err) {
 							fmt.Println("file: ", filename, "does not exists, copying from s3")
 							copyFileFromS3(svc, u.Bucket, *obj, filename, &wg, c.GlobalString("verbose"))
 							ActionRequired = true
 						} else {
-							if fileInfo.ModTime().UTC() != *obj.LastModified {
-								fmt.Println("modification time of file:", filename, "does not match one from s3, ordering copy")
+							md5sum := strings.TrimSuffix(strings.TrimPrefix(*obj.ETag, "\""), "\"")
+							match, err := fileMD5Match(filename, md5sum)
+							if err != nil {
+								// we basically don't care at this stage
+							}
+							if !match {
+								fmt.Printf("file %s md5sum does not equal to registered in s3: %s copying from s3\n", filename, md5sum)
 								copyFileFromS3(svc, u.Bucket, *obj, filename, &wg, c.GlobalString("verbose"))
 								ActionRequired = true
 							}
@@ -236,6 +242,35 @@ func CmdSync(c *cli.Context) error {
 	}
 	return nil
 
+}
+
+func fileMD5Match(filename, md5sum string) (bool, error) {
+	f, err := os.Open(filename)
+	defer f.Close()
+	if err != nil {
+		if os.IsNotExist(err) {
+			// it is expected error, if file does not exists, we consider it as failure
+			return false, err
+		}
+		fmt.Printf("Could not open file: %s, due to error: %s\n", filename, err)
+		return false, err
+	}
+
+	match, err := md5Match(f, md5sum)
+	if err != nil {
+		fmt.Printf("Could not calculate m5d sum for file: %s, due to error: %s\n", filename, err)
+		return false, err
+	}
+	return match, err
+}
+
+func md5Match(f io.Reader, md5sum string) (bool, error) {
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return false, err
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil)) == md5sum, nil
 }
 
 func copyFileFromS3(s *s3.S3, bucket string, obj s3.Object, filename string, wg *sync.WaitGroup, verbose string) error {
