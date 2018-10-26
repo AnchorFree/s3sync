@@ -1,9 +1,7 @@
 package main
 
 import (
-	"crypto/md5"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/url"
@@ -13,20 +11,11 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/urfave/cli"
-
-	apiv1 "k8s.io/api/core/v1"
-	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	wait "k8s.io/apimachinery/pkg/util/wait"
-	discovery "k8s.io/apimachinery/pkg/version"
-	"k8s.io/client-go/kubernetes"
-	rest "k8s.io/client-go/rest"
 )
 
 // Lists all objects in a bucket using pagination
@@ -79,7 +68,7 @@ func parseURL(path string) S3Address {
 func main() {
 	app := cli.NewApp()
 	app.Name = "s3sync"
-	app.Version = "0.0.5"
+	app.Version = "0.0.6"
 
 	cli.VersionFlag = cli.BoolFlag{
 		Name:  "version, V",
@@ -127,6 +116,11 @@ func main() {
 			Usage:  "Verbose flag",
 			EnvVar: "VERBOSE",
 		},
+		cli.BoolFlag{
+			Name:   "force",
+			Usage:  "Force mode will delete files which are not in the bucket",
+			EnvVar: "FORCE",
+		},
 	}
 
 	app.Commands = []cli.Command{
@@ -166,6 +160,9 @@ func CmdSync(c *cli.Context) error {
 	var ActionRequired bool
 	secret_hash = make(map[string]map[string][]byte)
 
+	// keep files inside s3 that should exists on the local disk
+	var s3files []string
+
 	err = svc.ListObjectsV2Pages(params,
 		func(p *s3.ListObjectsV2Output, last bool) (shouldContinue bool) {
 			i++
@@ -183,6 +180,7 @@ func CmdSync(c *cli.Context) error {
 				}
 
 				if matched && filter_out != true {
+					s3files = append(s3files, filepath.Base(*obj.Key))
 					if c.GlobalString("create-k8s-secret") == "true" {
 						saveFileToSecretMapFromS3(svc, u.Bucket, *obj, filepath.Base(*obj.Key), &wg)
 					} else {
@@ -210,6 +208,24 @@ func CmdSync(c *cli.Context) error {
 			wg.Wait()
 			return true
 		})
+
+	if c.GlobalBool("force") {
+		dirFiles, err := ioutil.ReadDir(local_path)
+		if err != nil {
+			fmt.Printf("Could not list directory %s due to %v\n", local_path, err)
+		}
+		for _, file := range dirFiles {
+			if !Contains(s3files, file.Name()) {
+				filename := filepath.Join(local_path, file.Name())
+				fmt.Printf("Removing file %s because it doesn't not exist in s3 bucket\n", filename)
+				err = os.Remove(filename)
+				ActionRequired = true
+				if err != nil {
+					fmt.Printf("Could not remove file %s due to: %v\n", filename, err)
+				}
+			}
+		}
+	}
 
 	if c.GlobalString("create-k8s-secret") == "true" {
 		secret_namespace := "default"
@@ -242,229 +258,4 @@ func CmdSync(c *cli.Context) error {
 	}
 	return nil
 
-}
-
-func fileMD5Match(filename, md5sum string) (bool, error) {
-	f, err := os.Open(filename)
-	defer f.Close()
-	if err != nil {
-		if os.IsNotExist(err) {
-			// it is expected error, if file does not exists, we consider it as failure
-			return false, err
-		}
-		fmt.Printf("Could not open file: %s, due to error: %s\n", filename, err)
-		return false, err
-	}
-
-	match, err := md5Match(f, md5sum)
-	if err != nil {
-		fmt.Printf("Could not calculate m5d sum for file: %s, due to error: %s\n", filename, err)
-		return false, err
-	}
-	return match, err
-}
-
-func md5Match(f io.Reader, md5sum string) (bool, error) {
-	h := md5.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return false, err
-	}
-
-	return fmt.Sprintf("%x", h.Sum(nil)) == md5sum, nil
-}
-
-func copyFileFromS3(s *s3.S3, bucket string, obj s3.Object, filename string, wg *sync.WaitGroup, verbose string) error {
-	wg.Add(1)
-	go func() error {
-		defer wg.Done()
-		params := &s3.GetObjectInput{
-			Bucket: aws.String(bucket),   // Required
-			Key:    aws.String(*obj.Key), // Required
-		}
-
-		if verbose == "true" {
-			fmt.Println("Getting ", filename, " from ", bucket)
-		}
-		resp, err := s.GetObject(params)
-		if err != nil {
-			fmt.Println("Could not get s3 object due to:", err)
-			return err
-		}
-		if verbose == "true" {
-			fmt.Println("Reading certificate ", filename, " from bucket ", bucket)
-		}
-		data, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Could not download file from s3 due to:", err)
-			return err
-		}
-
-		if verbose == "true" {
-			fmt.Println("Writing file ", filename)
-		}
-		err = ioutil.WriteFile(filename, data, 0666)
-		if err != nil {
-			fmt.Println("Could not write file from s3 due to:", err)
-			return err
-		}
-		return os.Chtimes(filename, *obj.LastModified, *obj.LastModified)
-	}()
-	return nil
-}
-
-func createApiserverClient() (*kubernetes.Clientset, error) {
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		fmt.Println("could not execute due to error:", err)
-		return nil, err
-	}
-
-	cfg.QPS = defaultQPS
-	cfg.Burst = defaultBurst
-	cfg.ContentType = "application/vnd.kubernetes.protobuf"
-
-	client, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		fmt.Println("could not execute due to error:", err)
-		return nil, err
-	}
-
-	var v *discovery.Info
-
-	// In some environments is possible the client cannot connect the API server in the first request
-	// https://github.com/kubernetes/ingress-nginx/issues/1968
-	defaultRetry := wait.Backoff{
-		Steps:    10,
-		Duration: 1 * time.Second,
-		Factor:   1.5,
-		Jitter:   0.1,
-	}
-
-	var lastErr error
-	retries := 0
-	err = wait.ExponentialBackoff(defaultRetry, func() (bool, error) {
-		v, err = client.Discovery().ServerVersion()
-		if err == nil {
-			return true, nil
-		}
-
-		lastErr = err
-		retries++
-		return false, nil
-	})
-
-	// err is not null only if there was a timeout in the exponential backoff (ErrWaitTimeout)
-	if err != nil {
-		return nil, lastErr
-	}
-
-	return client, nil
-}
-
-func EnsureSecret(secret *apiv1.Secret, verbose string) (*apiv1.Secret, error) {
-	kubeClient, err := createApiserverClient()
-	s, err := kubeClient.CoreV1().Secrets(secret.Namespace).Create(secret)
-	if err != nil {
-		if k8sErrors.IsAlreadyExists(err) {
-			if verbose == "true" {
-				fmt.Println("Secret", secret.Name, " already exist in namespace ", secret.Namespace, ", updating")
-			}
-			return kubeClient.CoreV1().Secrets(secret.Namespace).Update(secret)
-		}
-		fmt.Println("could not execute due to error:", err)
-		return nil, err
-	}
-	if verbose == "true" {
-		fmt.Println("Secret", secret.Name, " created in namespace ", secret.Namespace)
-	}
-	return s, nil
-}
-
-func saveFileToSecretMapFromS3(s *s3.S3, bucket string, obj s3.Object, filename string, wg *sync.WaitGroup) error {
-	defer wg.Done()
-	wg.Add(1)
-	params := &s3.GetObjectInput{
-		Bucket: aws.String(bucket),   // Required
-		Key:    aws.String(*obj.Key), // Required
-	}
-	resp, err := s.GetObject(params)
-	if err != nil {
-		return err
-	}
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Could not download file from s3 due to:", err)
-		return err
-	}
-
-	if strings.HasSuffix(filename, ".key") || strings.HasSuffix(filename, ".crt") {
-
-		// If it's a wildcard certificate, we should change
-		// the initial underscore in the filename, since we use
-		// this name (stripping off '.crt' or '.key' suffix) as
-		// the name of k8s secret, and kubernetes doesn't allow
-		// a resource name to start with underscore
-		secretName := ""
-		if strings.HasPrefix(filename, "_.") {
-			secretName = "wildcard" + filename[1:len(filename)-4]
-		} else {
-			secretName = filename[:len(filename)-4]
-		}
-
-		if secret_hash[secretName] == nil {
-			secret_hash[secretName] = make(map[string][]byte)
-		}
-
-		if strings.HasSuffix(filename, ".key") {
-			secret_hash[secretName]["key"] = data
-		} else {
-			secret_hash[secretName]["cert"] = data
-		}
-	}
-	return err
-}
-
-func saveSecretMapToK8s(sh map[string]map[string][]byte, namespace string, label_name string, label_value string, verbose string) (err error) {
-	if verbose == "true" {
-		fmt.Println("Start creating secrets in Kubernetes")
-	}
-
-	for secret_domain := range sh {
-		var err_message string
-		if sh[secret_domain]["cert"] == nil {
-			err_message = "ERROR: " + secret_domain + " do not have cert file"
-			fmt.Println(err_message)
-		} else if sh[secret_domain]["key"] == nil {
-			err_message = "ERROR: " + secret_domain + " do not have key file"
-			fmt.Println(err_message)
-		} else {
-			var labels map[string]string
-			labels = make(map[string]string)
-			labels["cert_domain"] = secret_domain
-			labels["created_by"] = "s3sync"
-			if label_name != "" && label_value != "" {
-				labels[label_name] = label_value
-			}
-
-			_, err = EnsureSecret(&apiv1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secret_domain,
-					Namespace: namespace,
-					Labels:    labels,
-				},
-				Data: map[string][]byte{
-					apiv1.TLSCertKey:       sh[secret_domain]["cert"],
-					apiv1.TLSPrivateKeyKey: sh[secret_domain]["key"],
-				},
-				Type: apiv1.SecretType("kubernetes.io/tls"),
-			}, verbose)
-
-			if err != nil {
-				fmt.Println(err.Error())
-				return err
-			}
-		}
-	}
-	return nil
 }
