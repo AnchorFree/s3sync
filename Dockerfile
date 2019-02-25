@@ -1,4 +1,4 @@
-FROM golang:1.11-alpine3.7 as builder
+FROM golang:1.10-alpine3.7 as builder
 
 RUN apk add --no-cache curl git
 COPY . /go/src/github.com/anchorfree/s3sync
