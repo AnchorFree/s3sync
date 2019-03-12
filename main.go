@@ -116,7 +116,7 @@ func main() {
 			Usage:  "Verbose flag",
 			EnvVar: "VERBOSE",
 		},
-		cli.BoolFlag{
+		cli.StringFlag{
 			Name:   "force",
 			Usage:  "Force mode will delete files which are not in the bucket",
 			EnvVar: "FORCE",
@@ -209,7 +209,7 @@ func CmdSync(c *cli.Context) error {
 			return true
 		})
 
-	if c.GlobalBool("force") {
+	if c.GlobalString("force") == "true" {
 		dirFiles, err := ioutil.ReadDir(local_path)
 		if err != nil {
 			fmt.Printf("Could not list directory %s due to %v\n", local_path, err)
