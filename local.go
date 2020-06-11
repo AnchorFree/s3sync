@@ -40,7 +40,7 @@ func copyFileFromS3(s *s3.S3, bucket string, obj s3.Object, filename string, wg 
 		if verbose == "true" {
 			fmt.Println("Writing file ", filename)
 		}
-		err = ioutil.WriteFile(filename, data, 0666)
+		err = ioutil.WriteFile(filename, data, 0600)
 		if err != nil {
 			fmt.Println("Could not write file from s3 due to:", err)
 			return err

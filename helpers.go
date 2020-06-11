@@ -1,15 +1,15 @@
 package main
 
 import (
-	"crypto/md5"
+	"crypto/md5" // #nosec
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 func fileMD5Match(filename, md5sum string) (bool, error) {
-	f, err := os.Open(filename)
-	defer f.Close()
+	f, err := os.Open(filepath.Clean(filename))
 	if err != nil {
 		if os.IsNotExist(err) {
 			// it is expected error, if file does not exists, we consider it as failure
@@ -24,11 +24,14 @@ func fileMD5Match(filename, md5sum string) (bool, error) {
 		fmt.Printf("Could not calculate m5d sum for file: %s, due to error: %s\n", filename, err)
 		return false, err
 	}
+	_ = f.Close() // at this point we don't really care if we failed to close the file
 	return match, err
 }
 
 func md5Match(f io.Reader, md5sum string) (bool, error) {
-	h := md5.New()
+	// we use md5 only to check if a file has changed. it seems pointless to refactor
+	// it to use sha256 only to make gosec happy in this particular case.
+	h := md5.New() // #nosec
 	if _, err := io.Copy(h, f); err != nil {
 		return false, err
 	}
