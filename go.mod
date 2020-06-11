@@ -1,5 +1,7 @@
 module github.com/anchorfree/docker-s3sync
 
+go 1.14
+
 require (
 	github.com/aws/aws-sdk-go v1.15.63
 	github.com/davecgh/go-spew v1.1.1 // indirect

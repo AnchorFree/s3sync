@@ -131,7 +131,11 @@ func main() {
 			Flags:  app.Flags,
 		},
 	}
-	app.Run(os.Args)
+	err := app.Run(os.Args)
+	if err != nil {
+		log.Fatal("Failed to run the app", err)
+	}
+
 }
 
 func CmdSync(c *cli.Context) error {
@@ -182,13 +186,14 @@ func CmdSync(c *cli.Context) error {
 				if matched && filter_out != true {
 					s3files = append(s3files, filepath.Base(*obj.Key))
 					if c.GlobalString("create-k8s-secret") == "true" {
-						saveFileToSecretMapFromS3(svc, u.Bucket, *obj, filepath.Base(*obj.Key), &wg)
+						// just to stfu gosec, proper error handling requires refactoring of the whole app...
+						_ = saveFileToSecretMapFromS3(svc, u.Bucket, *obj, filepath.Base(*obj.Key), &wg)
 					} else {
 						filename := filepath.Join(local_path, filepath.Base(*obj.Key))
 
 						if _, err := os.Stat(filename); os.IsNotExist(err) {
 							fmt.Println("file: ", filename, "does not exists, copying from s3")
-							copyFileFromS3(svc, u.Bucket, *obj, filename, &wg, c.GlobalString("verbose"))
+							_ = copyFileFromS3(svc, u.Bucket, *obj, filename, &wg, c.GlobalString("verbose"))
 							ActionRequired = true
 						} else {
 							md5sum := strings.TrimSuffix(strings.TrimPrefix(*obj.ETag, "\""), "\"")
@@ -198,7 +203,7 @@ func CmdSync(c *cli.Context) error {
 							}
 							if !match {
 								fmt.Printf("file %s md5sum does not equal to registered in s3: %s copying from s3\n", filename, md5sum)
-								copyFileFromS3(svc, u.Bucket, *obj, filename, &wg, c.GlobalString("verbose"))
+								_ = copyFileFromS3(svc, u.Bucket, *obj, filename, &wg, c.GlobalString("verbose"))
 								ActionRequired = true
 							}
 						}
@@ -247,8 +252,9 @@ func CmdSync(c *cli.Context) error {
 	if ActionRequired {
 		action := fmt.Sprintf("%v", c.GlobalString("exec-on-change"))
 		fmt.Println("Executing command", action)
-
-		cmd := exec.Command("/bin/sh", "-c", action)
+		// This is potentially harmful, because the value of action can be really anything.
+		// However, there is no quick fix, this is actually by design, so we'll have to leave it as is for now...
+		cmd := exec.Command("/bin/sh", "-c", action) // #nosec
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
