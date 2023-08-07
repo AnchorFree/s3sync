@@ -1,6 +1,7 @@
 FROM golang:1.14-alpine3.12 as builder
 
 ENV GO111MODULE=on
+# hadolint ignore=DL3018
 RUN apk add --no-cache curl git
 # hadolint ignore=DL3003
 COPY . /cmd
