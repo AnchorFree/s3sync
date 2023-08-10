@@ -5,6 +5,7 @@ ENV GO111MODULE=on
 RUN apk add --no-cache curl git
 # hadolint ignore=DL3003
 COPY . /cmd
+# hadolint ignore=DL3003
 RUN cd /cmd && go build
 
 FROM alpine:3.18
