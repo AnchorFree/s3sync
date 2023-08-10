@@ -1,13 +1,14 @@
-FROM golang:1.14-alpine3.12 as builder
+FROM golang:1.21.0-alpine3.18 as builder
 
 ENV GO111MODULE=on
 # hadolint ignore=DL3018
 RUN apk add --no-cache curl git
 # hadolint ignore=DL3003
 COPY . /cmd
+# hadolint ignore=DL3003
 RUN cd /cmd && go build
 
-FROM alpine:3.12
+FROM alpine:3.18
 LABEL maintainer="v.zorin@anchorfree.com"
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates curl netcat-openbsd
