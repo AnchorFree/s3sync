@@ -1,6 +1,6 @@
 module github.com/anchorfree/docker-s3sync
 
-go 1.14
+go 1.20.0
 
 require (
 	github.com/aws/aws-sdk-go v1.44.322
