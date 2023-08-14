@@ -3,15 +3,9 @@ name: "CodeQL Golang"
 
 on:
   push:
-    # branches: [ master ]
-    branches: 
-      - master
-      - DEVOPS-9349n-2
+    branches: [ master ]
   pull_request:
-    # branches: [ master ]
-    branches:
-      - master
-      - DEVOPS-9349n-2
+    branches: [ master ]
 
 
 
