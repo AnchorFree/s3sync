@@ -5,9 +5,9 @@ go 1.21
 require (
 	github.com/aws/aws-sdk-go v1.34.0
 	github.com/urfave/cli v1.20.0
-	k8s.io/api v0.17.3
-	k8s.io/apimachinery v0.17.3
-	k8s.io/client-go v0.17.3
+	k8s.io/api v0.17.16
+	k8s.io/apimachinery v0.17.16
+	k8s.io/client-go v0.17.16
 )
 
 require (
