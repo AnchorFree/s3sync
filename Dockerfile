@@ -9,10 +9,11 @@ COPY . /cmd
 RUN cd /cmd && go build
 
 FROM alpine:3.18
-LABEL maintainer="v.zorin@anchorfree.com"
+# LABEL maintainer="v.zorin@anchorfree.com"
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates curl netcat-openbsd
-COPY --from=builder /cmd/docker-s3sync /s3sync
+
+COPY --from=builder /cmd/s3sync /s3sync
 COPY entrypoint.sh /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
