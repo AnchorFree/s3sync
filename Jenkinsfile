@@ -6,7 +6,7 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                dockerBuildTagPush(project: "aura-networking/docker-registry-public")
+                dockerBuildTagPush(project: "aura-networking/docker-registry")
             }
         }
     }
